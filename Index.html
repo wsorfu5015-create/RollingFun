@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>FVP pro player V1.0</title>
+    
+    <!-- iPad / iOS PWA 原生 App 模式設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FVP Pro">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#020617">
+
+    <!-- 內嵌 SVG App 圖示 (供 iPad 加入主畫面與瀏覽器分頁使用) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='100%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23g)'/%3E%3Cpath d='M192 152l176 104-176 104V152z' fill='%23ffffff'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='100%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23g)'/%3E%3Cpath d='M192 152l176 104-176 104V152z' fill='%23ffffff'/%3E%3C/svg%3E">
+
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 圖示庫 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入 HLS.js 以支援 .m3u8 串流格式 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <!-- 引入 Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 支援 iOS 瀏海與安全區域 */
+        body {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 自訂進度條與滑桿樣式 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.25);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        /* 隱藏原生全螢幕控制項 */
+        video::-webkit-media-controls {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-blue-500 selection:text-white">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <i class="fa-solid fa-play text-white text-sm ml-0.5"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tight leading-none flex items-center gap-2">
+                    <span>FVP pro player</span>
+                    <span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">V1.0</span>
+                </h1>
+                <p class="text-xs text-slate-400 mt-0.5">專業級多功能影音播放器</p>
+            </div>
+        </div>
+
+        <!-- 檔案載入與網址輸入區 -->
+        <div class="flex flex-wrap items-center gap-2 flex-1 max-w-2xl justify-end">
+            <!-- 網址輸入 -->
+            <div class="flex items-center bg-slate-800 rounded-lg border border-slate-700 focus-within:border-blue-500 overflow-hidden flex-1 min-w-[200px]">
+                <input type="text" id="urlInput" placeholder="輸入影片網址 (MP4, WebM, M3U8...)" 
+                    class="bg-transparent px-3 py-1.5 text-sm w-full focus:outline-none text-slate-200 placeholder-slate-500">
+                <button id="loadUrlBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap">
+                    載入網址
+                </button>
+            </div>
+
+            <!-- 本機檔案選擇 -->
+            <label for="fileInput" class="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all shadow-md shadow-blue-600/20 flex items-center gap-2 whitespace-nowrap">
+                <i class="fa-solid fa-folder-open"></i>
+                <span>開啟本機影片</span>
+            </label>
+            <input type="file" id="fileInput" accept="video/*,.mkv,.avi,.mov,.flv,.wmv,.m3u8" class="hidden">
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-1 flex flex-col items-center justify-center p-4 md:p-6 max-w-6xl w-full mx-auto gap-4">
+        
+        <!-- 狀態與提示訊息橫幅 -->
+        <div id="toastBanner" class="hidden w-full bg-slate-800/90 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-xl text-sm flex items-center justify-between shadow-lg transition-all">
+            <div class="flex items-center gap-2">
+                <i id="toastIcon" class="fa-solid fa-circle-info text-blue-400"></i>
+                <span id="toastText">提示訊息</span>
+            </div>
+            <button onclick="hideToast()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- 播放器容器 (支援全螢幕) -->
+        <div id="playerContainer" class="relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 group flex flex-col justify-center aspect-video">
+            
+            <!-- 拖放檔案覆蓋層 -->
+            <div id="dropOverlay" class="hidden absolute inset-0 bg-blue-600/30 backdrop-blur-sm border-2 border-dashed border-blue-400 z-40 flex flex-col items-center justify-center pointer-events-none">
+                <i class="fa-solid fa-cloud-arrow-up text-5xl text-white mb-3 animate-bounce"></i>
+                <p class="text-xl font-bold text-white">放開以載入影片檔案</p>
+            </div>
+
+            <!-- 初始歡迎畫面 / 無影片狀態 -->
+            <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 z-10 p-6 text-center">
+                <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mb-4 text-slate-400 border border-slate-700">
+                    <i class="fa-solid fa-film text-3xl"></i>
+                </div>
+                <h2 class="text-xl font-semibold text-white mb-2">拖放影片至此，或點擊上方開啟檔案</h2>
+                <p class="text-sm text-slate-400 max-w-md mb-6">
+                    支援 MP4, WebM, Ogg, MOV, MKV 及 HLS (.m3u8) 串流。提供逐幀寸動、A-B 區段循環與變速控制。
+                </p>
+                <div class="flex flex-wrap justify-center gap-3">
+                    <button onclick="document.getElementById('fileInput').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-600/20">
+                        <i class="fa-solid fa-upload mr-2"></i>選擇本機檔案
+                    </button>
+                    <button id="loadSampleBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-5 py-2.5 rounded-xl text-sm font-medium transition-all">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-400"></i>載入測試範例影片
+                    </button>
+                </div>
+            </div>
+
+            <!-- 核心 Video 元素 -->
+            <video id="videoElement" class="w-full h-full object-contain cursor-pointer transition-all duration-200" playsinline webkit-playsinline></video>
+
+            <!-- 畫面中央狀態指示器 (快轉/倒退/播放/暫停動畫) -->
+            <div id="centerIndicator" class="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 z-20">
+                <div class="bg-black/60 backdrop-blur-md text-white px-5 py-3 rounded-2xl flex items-center gap-3 text-lg font-semibold shadow-xl border border-white/10">
+                    <i id="centerIcon" class="fa-solid fa-play"></i>
+                    <span id="centerText">播放</span>
+                </div>
+            </div>
+
+            <!-- 整合設定面板 (點擊齒輪按鈕開啟) -->
+            <div id="settingsPanel" class="hidden absolute bottom-16 right-4 w-80 sm:w-96 max-h-[75%] overflow-y-auto bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-4 shadow-2xl z-30 text-xs text-slate-200 flex flex-col gap-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <span class="font-bold text-sm text-white flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-blue-400"></i> 進階播放與畫面設定
+                    </span>
+                    <button id="closeSettingsBtn" class="text-slate-400 hover:text-white w-6 h-6 rounded-lg hover:bg-slate-800 flex items-center justify-center transition-colors">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- 1. A-B 區段循環設定 -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                            <i class="fa-solid fa-repeat text-amber-400"></i> A-B 區段循環
+                        </span>
+                        <span id="abBadge" class="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400">未設定</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 font-mono text-[11px] bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                        <div>起點 A: <span id="timeADisplay" class="text-amber-400 font-semibold">--:--.--</span></div>
+                        <div>終點 B: <span id="timeBDisplay" class="text-amber-400 font-semibold">--:--.--</span></div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button id="setABtn" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium text-slate-200 transition-colors border border-slate-700">
+                            設起點 A
+                        </button>
+                        <button id="setBBtn" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium text-slate-200 transition-colors border border-slate-700">
+                            設終點 B
+                        </button>
+                        <button id="toggleABBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 font-medium text-slate-400 transition-colors border border-slate-700 flex items-center gap-1">
+                            <i class="fa-solid fa-repeat"></i>
+                            <span id="abStatusText">關閉</span>
+                        </button>
+                        <button id="clearABBtn" class="px-2.5 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors hidden" title="清除 A-B 點">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. 逐幀寸動與 FPS 設定 -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                            <i class="fa-solid fa-film text-blue-400"></i> 逐幀寸動控制
+                        </span>
+                        <select id="fpsSelect" class="bg-slate-800 text-slate-200 rounded-lg px-2 py-1 text-[11px] border border-slate-700 focus:outline-none">
+                            <option value="24">24 FPS</option>
+                            <option value="25">25 FPS</option>
+                            <option value="30" selected>30 FPS</option>
+                            <option value="60">60 FPS</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="stepBackBtn" class="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition-colors border border-slate-700 flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-backward-step"></i> 上一幀 (-1)
+                        </button>
+                        <button id="stepForwardBtn" class="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition-colors border border-slate-700 flex items-center justify-center gap-1.5">
+                            下一幀 (+1) <i class="fa-solid fa-forward-step"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. 畫面明暗度調整 -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                            <i class="fa-solid fa-sun text-yellow-400"></i> 畫面明暗度
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <span id="brightnessValue" class="font-mono text-blue-400 font-semibold">100%</span>
+                            <button id="resetBrightnessBtn" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">重置</button>
+                        </div>
+                    </div>
+                    <input type="range" id="brightnessSlider" min="20" max="200" step="5" value="100" class="w-full">
+                </div>
+
+                <!-- 4. 影片尺寸與延展模式 -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                            <i class="fa-solid fa-up-right-and-down-left-from-center text-emerald-400"></i> 影片尺寸與畫面比例
+                        </span>
+                        <span id="sizeModeBadge" class="text-[10px] text-slate-400">預設適應</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5" id="sizeButtonsGroup">
+                        <button data-size="contain" class="size-btn py-1.5 rounded-lg bg-blue-600 text-white font-medium transition-colors border border-blue-500">適應</button>
+                        <button data-size="scale-75" class="size-btn py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors border border-slate-700">75%</button>
+                        <button data-size="scale-125" class="size-btn py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors border border-slate-700">125%</button>
+                        <button data-size="cover" class="size-btn py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors border border-slate-700">裁切填滿</button>
+                    </div>
+                    <button id="stretchFullscreenBtn" class="w-full py-2 rounded-lg bg-gradient-to-r from-blue-600/80 to-indigo-600/80 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold transition-all border border-blue-500/40 flex items-center justify-center gap-2 shadow-md">
+                        <i class="fa-solid fa-maximize"></i>
+                        <span id="stretchBtnText">延展至全螢幕 (無黑邊拉伸)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 懸浮控制面板 (底部) -->
+            <div id="controlsOverlay" class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-12 pb-3 px-4 transition-opacity duration-300 z-20 flex flex-col gap-2">
+                
+                <!-- 進度條與 A-B 區段視覺標記 -->
+                <div class="relative w-full flex items-center group/progress py-1">
+                    <!-- A-B 循環區段高亮條 -->
+                    <div id="abHighlight" class="hidden absolute h-1.5 bg-amber-400/60 rounded pointer-events-none z-10"></div>
+                    <!-- A 點標記 -->
+                    <div id="markerA" class="hidden absolute -top-3.5 -translate-x-1/2 text-[10px] font-bold bg-amber-500 text-slate-950 px-1 rounded pointer-events-none z-20">A</div>
+                    <!-- B 點標記 -->
+                    <div id="markerB" class="hidden absolute -top-3.5 -translate-x-1/2 text-[10px] font-bold bg-amber-500 text-slate-950 px-1 rounded pointer-events-none z-20">B</div>
+                    
+                    <input type="range" id="seekBar" min="0" max="100" step="0.01" value="0" class="w-full z-10">
+                </div>
+
+                <!-- 控制按鈕列 -->
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <!-- 左側：基本播放控制 + 寸動按鍵 + 時間 -->
+                    <div class="flex items-center gap-1 sm:gap-1.5">
+                        <!-- 播放/暫停 -->
+                        <button id="playPauseBtn" class="w-9 h-9 rounded-lg hover:bg-white/15 active:bg-white/25 flex items-center justify-center text-white transition-colors" title="播放 / 暫停 (空白鍵)">
+                            <i class="fa-solid fa-play text-base"></i>
+                        </button>
+                        
+                        <!-- 停止 -->
+                        <button id="stopBtn" class="w-9 h-9 rounded-lg hover:bg-white/15 active:bg-white/25 flex items-center justify-center text-slate-300 hover:text-white transition-colors" title="停止 (歸零並暫停)">
+                            <i class="fa-solid fa-stop text-sm"></i>
+                        </button>
+
+                        <!-- 觸控專用：上一幀 / 下一幀寸動按鈕 (適合 iPad / 平板操作) -->
+                        <div class="flex items-center bg-white/10 rounded-lg p-0.5 border border-white/10 mx-0.5">
+                            <button id="quickStepBackBtn" class="px-2.5 py-1.5 rounded-md hover:bg-white/15 active:bg-blue-600 text-slate-200 hover:text-white transition-colors flex items-center gap-1 text-xs font-medium" title="上一幀 (-1 幀)">
+                                <i class="fa-solid fa-backward-step"></i>
+                                <span class="hidden sm:inline">-1幀</span>
+                            </button>
+                            <div class="w-px h-4 bg-white/15"></div>
+                            <button id="quickStepForwardBtn" class="px-2.5 py-1.5 rounded-md hover:bg-white/15 active:bg-blue-600 text-slate-200 hover:text-white transition-colors flex items-center gap-1 text-xs font-medium" title="下一幀 (+1 幀)">
+                                <span class="hidden sm:inline">+1幀</span>
+                                <i class="fa-solid fa-forward-step"></i>
+                            </button>
+                        </div>
+
+                        <!-- 時間顯示 (精確到毫秒) -->
+                        <div class="text-xs font-mono text-slate-300 ml-1 select-none">
+                            <span id="currentTimeDisplay" class="text-white font-semibold">00:00.00</span>
+                            <span class="text-slate-500 mx-1">/</span>
+                            <span id="durationDisplay">00:00.00</span>
+                        </div>
+                    </div>
+
+                    <!-- 右側：速度 + 音量 + 設定按鈕 + 全螢幕 -->
+                    <div class="flex items-center gap-1.5 sm:gap-2">
+
+                        <!-- 播放速度選擇 -->
+                        <div class="relative">
+                            <select id="speedSelect" class="bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg px-2.5 py-1.5 border border-white/10 focus:outline-none cursor-pointer appearance-none pr-6" title="播放速度">
+                                <option value="0.1" class="bg-slate-900">0.1x</option>
+                                <option value="0.25" class="bg-slate-900">0.25x</option>
+                                <option value="0.5" class="bg-slate-900">0.5x</option>
+                                <option value="0.75" class="bg-slate-900">0.75x</option>
+                                <option value="1" selected class="bg-slate-900">1.0x</option>
+                                <option value="1.25" class="bg-slate-900">1.25x</option>
+                                <option value="1.5" class="bg-slate-900">1.5x</option>
+                                <option value="2" class="bg-slate-900">2.0x</option>
+                                <option value="3" class="bg-slate-900">3.0x</option>
+                            </select>
+                            <i class="fa-solid fa-gauge-high text-[10px] text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                        </div>
+
+                        <!-- 音量控制 -->
+                        <div class="flex items-center gap-1.5 bg-white/10 rounded-lg px-2 py-1 border border-white/10">
+                            <button id="muteBtn" class="text-slate-200 hover:text-white w-5 text-center" title="靜音切換 (M)">
+                                <i class="fa-solid fa-volume-high text-xs"></i>
+                            </button>
+                            <input type="range" id="volumeSlider" min="0" max="1" step="0.02" value="1" class="w-14 sm:w-20">
+                        </div>
+
+                        <!-- 整合設定按鈕 -->
+                        <button id="settingsBtn" class="w-9 h-9 rounded-lg hover:bg-white/15 flex items-center justify-center text-slate-200 hover:text-white transition-colors relative" title="進階設定 (A-B循環、寸動、明暗、尺寸)">
+                            <i class="fa-solid fa-gear text-sm"></i>
+                            <span id="settingsActiveDot" class="hidden absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400"></span>
+                        </button>
+
+                        <!-- 全螢幕切換 -->
+                        <button id="fullscreenBtn" class="w-9 h-9 rounded-lg hover:bg-white/15 flex items-center justify-center text-slate-200 hover:text-white transition-colors" title="全螢幕切換 (F)">
+                            <i class="fa-solid fa-expand text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部功能資訊與快捷鍵說明卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full text-xs text-slate-400">
+            <!-- iPad 加入主畫面與功能提示 -->
+            <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                        <i class="fa-solid fa-tablet-screen-button"></i>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-slate-200">iPad / 手機原生全螢幕 App 模式</div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">在 Safari 開啟後點擊「分享 <i class="fa-solid fa-arrow-up-from-bracket mx-0.5"></i>」→「加入主畫面」，即可無網址列獨立全螢幕操作。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 鍵盤快捷鍵指南 -->
+            <div class="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
+                <div class="font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <i class="fa-solid fa-keyboard text-emerald-400"></i> 鍵盤快捷鍵
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-y-1 gap-x-2 text-[11px]">
+                    <div><kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">Space</kbd> 播放/暫停</div>
+                    <div><kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">← / →</kbd> 寸動微調</div>
+                    <div><kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">[ / ]</kbd> 設定 A / B</div>
+                    <div><kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">F</kbd> 全螢幕 / <kbd class="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">M</kbd> 靜音</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 動態產生 Web App Manifest 以支援單檔 PWA 安裝
+        (function initManifest() {
+            const manifest = {
+                name: "FVP pro player V1.0",
+                short_name: "FVP Pro",
+                start_url: "./index.html",
+                display: "standalone",
+                background_color: "#020617",
+                theme_color: "#020617",
+                icons: [{
+                    src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='100%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%232563eb'/%3E%3Cstop offset='100%25' stop-color='%236366f1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23g)'/%3E%3Cpath d='M192 152l176 104-176 104V152z' fill='%23ffffff'/%3E%3C/svg%3E",
+                    sizes: "512x512",
+                    type: "image/svg+xml"
+                }]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        })();
+
+        // DOM 元素參照
+        const video = document.getElementById('videoElement');
+        const playerContainer = document.getElementById('playerContainer');
+        const emptyState = document.getElementById('emptyState');
+        const fileInput = document.getElementById('fileInput');
+        const urlInput = document.getElementById('urlInput');
+        const loadUrlBtn = document.getElementById('loadUrlBtn');
+        const loadSampleBtn = document.getElementById('loadSampleBtn');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        // 控制列按鈕
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const stepBackBtn = document.getElementById('stepBackBtn');
+        const stepForwardBtn = document.getElementById('stepForwardBtn');
+        const quickStepBackBtn = document.getElementById('quickStepBackBtn');
+        const quickStepForwardBtn = document.getElementById('quickStepForwardBtn');
+        const seekBar = document.getElementById('seekBar');
+        const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+        const durationDisplay = document.getElementById('durationDisplay');
+        const speedSelect = document.getElementById('speedSelect');
+        const fpsSelect = document.getElementById('fpsSelect');
+        const muteBtn = document.getElementById('muteBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const controlsOverlay = document.getElementById('controlsOverlay');
+
+        // 設定面板與畫面調整相關元素
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+        const settingsActiveDot = document.getElementById('settingsActiveDot');
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        const brightnessValue = document.getElementById('brightnessValue');
+        const resetBrightnessBtn = document.getElementById('resetBrightnessBtn');
+        const sizeButtons = document.querySelectorAll('.size-btn');
+        const sizeModeBadge = document.getElementById('sizeModeBadge');
+        const stretchFullscreenBtn = document.getElementById('stretchFullscreenBtn');
+        const stretchBtnText = document.getElementById('stretchBtnText');
+
+        // A-B 循環相關元素
+        const setABtn = document.getElementById('setABtn');
+        const setBBtn = document.getElementById('setBBtn');
+        const toggleABBtn = document.getElementById('toggleABBtn');
+        const clearABBtn = document.getElementById('clearABBtn');
+        const abStatusText = document.getElementById('abStatusText');
+        const abBadge = document.getElementById('abBadge');
+        const timeADisplay = document.getElementById('timeADisplay');
+        const timeBDisplay = document.getElementById('timeBDisplay');
+        const abHighlight = document.getElementById('abHighlight');
+        const markerA = document.getElementById('markerA');
+        const markerB = document.getElementById('markerB');
+
+        // 狀態變數
+        let hlsInstance = null;
+        let pointA = null;
+        let pointB = null;
+        let isABLoopActive = false;
+        let isStretched = false;
+        let currentSizeMode = 'contain';
+        let hideControlsTimeout = null;
+        let indicatorTimeout = null;
+
+        // 格式化時間 (MM:SS.ms)
+        function formatTime(seconds) {
+            if (isNaN(seconds) || !isFinite(seconds)) return "00:00.00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 100);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        }
+
+        // 顯示頂部提示橫幅
+        function showToast(message, type = 'info') {
+            const banner = document.getElementById('toastBanner');
+            const text = document.getElementById('toastText');
+            const icon = document.getElementById('toastIcon');
+            
+            text.textContent = message;
+            banner.classList.remove('hidden');
+            
+            if (type === 'error') {
+                icon.className = 'fa-solid fa-triangle-exclamation text-red-400';
+            } else if (type === 'success') {
+                icon.className = 'fa-solid fa-circle-check text-emerald-400';
+            } else {
+                icon.className = 'fa-solid fa-circle-info text-blue-400';
+            }
+        }
+
+        function hideToast() {
+            document.getElementById('toastBanner').classList.add('hidden');
+        }
+
+        // 顯示畫面中央回饋動畫
+        function triggerCenterIndicator(iconClass, text) {
+            const indicator = document.getElementById('centerIndicator');
+            const icon = document.getElementById('centerIcon');
+            const label = document.getElementById('centerText');
+
+            icon.className = `fa-solid ${iconClass}`;
+            label.textContent = text;
+
+            indicator.classList.remove('opacity-0');
+            clearTimeout(indicatorTimeout);
+            indicatorTimeout = setTimeout(() => {
+                indicator.classList.add('opacity-0');
+            }, 600);
+        }
+
+        // 載入影片來源 (支援本機 Blob URL、一般網址與 HLS .m3u8)
+        function loadVideoSource(src, fileName = '') {
+            hideToast();
+            clearABLoop();
+            emptyState.classList.add('hidden');
+
+            // 銷毀舊的 HLS 實例
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+
+            const isM3U8 = src.toLowerCase().includes('.m3u8') || fileName.toLowerCase().endsWith('.m3u8');
+
+            if (isM3U8 && Hls.isSupported()) {
+                hlsInstance = new Hls();
+                hlsInstance.loadSource(src);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {});
+                    showToast(`已載入 HLS 串流影片`, 'success');
+                });
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        showToast('串流載入失敗，請確認網址是否正確或允許跨域存取 (CORS)。', 'error');
+                    }
+                });
+            } else {
+                video.src = src;
+                video.load();
+                video.play().then(() => {
+                    if (fileName) showToast(`正在播放：${fileName}`, 'success');
+                }).catch(err => {
+                    console.warn("自動播放受阻或格式需手動點擊播放:", err);
+                });
+            }
+        }
+
+        // 處理本機檔案選擇
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                loadVideoSource(fileURL, file.name);
+            }
+        });
+
+        // 處理網址載入
+        loadUrlBtn.addEventListener('click', () => {
+            const url = urlInput.value.trim();
+            if (!url) {
+                showToast('請輸入有效的影片網址', 'error');
+                return;
+            }
+            loadVideoSource(url, url);
+        });
+
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUrlBtn.click();
+        });
+
+        // 載入免費公開測試影片 (Big Buck Bunny)
+        loadSampleBtn.addEventListener('click', () => {
+            const sampleUrl = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+            urlInput.value = sampleUrl;
+            loadVideoSource(sampleUrl, 'Big Buck Bunny (測試範例)');
+        });
+
+        // 拖放檔案支援
+        playerContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.remove('hidden');
+        });
+
+        playerContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.add('hidden');
+        });
+
+        playerContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropOverlay.classList.add('hidden');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                loadVideoSource(fileURL, file.name);
+            }
+        });
+
+        // 影片錯誤處理
+        video.addEventListener('error', () => {
+            if (!video.src) return;
+            showToast('無法解碼此影片格式或檔案已損毀。建議轉檔為 MP4 (H.264/AAC) 或 WebM 以獲得最佳相容性。', 'error');
+        });
+
+        // 播放 / 暫停切換
+        function togglePlayPause() {
+            if (!video.src && !hlsInstance) return;
+            if (video.paused || video.ended) {
+                video.play();
+                triggerCenterIndicator('fa-play', '播放');
+            } else {
+                video.pause();
+                triggerCenterIndicator('fa-pause', '暫停');
+            }
+        }
+
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        video.addEventListener('click', togglePlayPause);
+
+        // 更新播放按鈕圖示
+        video.addEventListener('play', () => {
+            playPauseBtn.innerHTML = '<i class="fa-solid fa-pause text-base"></i>';
+        });
+        video.addEventListener('pause', () => {
+            playPauseBtn.innerHTML = '<i class="fa-solid fa-play text-base"></i>';
+        });
+
+        // 停止功能 (暫停並歸零)
+        function stopVideo() {
+            if (!video.src && !hlsInstance) return;
+            video.pause();
+            video.currentTime = 0;
+            triggerCenterIndicator('fa-stop', '已停止');
+        }
+        stopBtn.addEventListener('click', stopVideo);
+
+        // 寸動功能 (逐幀前進/後退)
+        function stepFrame(direction) {
+            if (!video.src && !hlsInstance) return;
+            if (!video.paused) {
+                video.pause();
+            }
+            const fps = parseFloat(fpsSelect.value) || 30;
+            const frameTime = 1 / fps;
+            const newTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + (direction * frameTime)));
+            video.currentTime = newTime;
+            
+            triggerCenterIndicator(
+                direction > 0 ? 'fa-forward-step' : 'fa-backward-step',
+                direction > 0 ? '+1 幀' : '-1 幀'
+            );
+        }
+
+        stepBackBtn.addEventListener('click', () => stepFrame(-1));
+        stepForwardBtn.addEventListener('click', () => stepFrame(1));
+        quickStepBackBtn.addEventListener('click', () => stepFrame(-1));
+        quickStepForwardBtn.addEventListener('click', () => stepFrame(1));
+
+        // 進度條與時間更新 + A-B 循環邏輯檢查
+        video.addEventListener('loadedmetadata', () => {
+            seekBar.max = video.duration;
+            durationDisplay.textContent = formatTime(video.duration);
+            updateABVisuals();
+        });
+
+        video.addEventListener('timeupdate', () => {
+            if (isABLoopActive && pointA !== null && pointB !== null) {
+                if (video.currentTime >= pointB || video.currentTime < pointA - 0.1) {
+                    video.currentTime = pointA;
+                }
+            }
+
+            seekBar.value = video.currentTime;
+            currentTimeDisplay.textContent = formatTime(video.currentTime);
+        });
+
+        seekBar.addEventListener('input', () => {
+            video.currentTime = parseFloat(seekBar.value);
+            currentTimeDisplay.textContent = formatTime(video.currentTime);
+        });
+
+        // A-B 區段循環控制邏輯
+        function setPointA() {
+            if (!video.duration) return;
+            pointA = video.currentTime;
+            if (pointB !== null && pointB <= pointA) {
+                pointB = null;
+                isABLoopActive = false;
+            }
+            timeADisplay.textContent = formatTime(pointA);
+            updateABVisuals();
+            triggerCenterIndicator('fa-a', `設定起點 A: ${formatTime(pointA)}`);
+        }
+
+        function setPointB() {
+            if (!video.duration) return;
+            if (pointA === null) {
+                pointA = 0;
+                timeADisplay.textContent = formatTime(pointA);
+            }
+            if (video.currentTime <= pointA) {
+                showToast('終點 B 必須大於起點 A', 'error');
+                return;
+            }
+            pointB = video.currentTime;
+            timeBDisplay.textContent = formatTime(pointB);
+            isABLoopActive = true;
+            video.currentTime = pointA;
+            updateABVisuals();
+            triggerCenterIndicator('fa-repeat', 'A-B 循環已啟動');
+        }
+
+        function toggleABLoop() {
+            if (pointA === null || pointB === null) {
+                showToast('請先設定起點 A 與終點 B', 'info');
+                return;
+            }
+            isABLoopActive = !isABLoopActive;
+            updateABVisuals();
+            triggerCenterIndicator('fa-repeat', isABLoopActive ? '開啟 A-B 循環' : '暫停 A-B 循環');
+        }
+
+        function clearABLoop() {
+            pointA = null;
+            pointB = null;
+            isABLoopActive = false;
+            timeADisplay.textContent = '--:--.--';
+            timeBDisplay.textContent = '--:--.--';
+            updateABVisuals();
+        }
+
+        function updateABVisuals() {
+            const duration = video.duration || 1;
+
+            if (pointA !== null || pointB !== null) {
+                clearABBtn.classList.remove('hidden');
+            } else {
+                clearABBtn.classList.add('hidden');
+            }
+
+            if (isABLoopActive && pointA !== null && pointB !== null) {
+                toggleABBtn.classList.remove('text-slate-400', 'bg-slate-800');
+                toggleABBtn.classList.add('bg-amber-500', 'text-slate-950', 'font-bold');
+                abStatusText.textContent = '循環中';
+                abBadge.textContent = '循環啟用中';
+                abBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                settingsActiveDot.classList.remove('hidden');
+            } else {
+                toggleABBtn.classList.add('text-slate-400', 'bg-slate-800');
+                toggleABBtn.classList.remove('bg-amber-500', 'text-slate-950', 'font-bold');
+                abStatusText.textContent = '關閉';
+                abBadge.textContent = (pointA !== null || pointB !== null) ? '已設定 (未啟用)' : '未設定';
+                abBadge.className = 'px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-400';
+                settingsActiveDot.classList.add('hidden');
+            }
+
+            if (pointA !== null && video.duration) {
+                const percentA = (pointA / duration) * 100;
+                markerA.style.left = `${percentA}%`;
+                markerA.classList.remove('hidden');
+            } else {
+                markerA.classList.add('hidden');
+            }
+
+            if (pointB !== null && video.duration) {
+                const percentB = (pointB / duration) * 100;
+                markerB.style.left = `${percentB}%`;
+                markerB.classList.remove('hidden');
+            } else {
+                markerB.classList.add('hidden');
+            }
+
+            if (pointA !== null && pointB !== null && video.duration) {
+                const percentA = (pointA / duration) * 100;
+                const percentB = (pointB / duration) * 100;
+                abHighlight.style.left = `${percentA}%`;
+                abHighlight.style.width = `${percentB - percentA}%`;
+                abHighlight.classList.remove('hidden');
+            } else {
+                abHighlight.classList.add('hidden');
+            }
+        }
+
+        setABtn.addEventListener('click', setPointA);
+        setBBtn.addEventListener('click', setPointB);
+        toggleABBtn.addEventListener('click', toggleABLoop);
+        clearABBtn.addEventListener('click', clearABLoop);
+
+        // 設定面板開關控制
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsPanel.classList.toggle('hidden');
+            settingsBtn.classList.toggle('bg-white/20', !settingsPanel.classList.contains('hidden'));
+        });
+
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsPanel.classList.add('hidden');
+            settingsBtn.classList.remove('bg-white/20');
+        });
+
+        playerContainer.addEventListener('click', (e) => {
+            if (!settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
+                settingsPanel.classList.add('hidden');
+                settingsBtn.classList.remove('bg-white/20');
+            }
+        });
+
+        settingsPanel.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // 畫面明暗度調整
+        function updateBrightness(val) {
+            video.style.filter = `brightness(${val}%)`;
+            brightnessValue.textContent = `${val}%`;
+        }
+
+        brightnessSlider.addEventListener('input', () => {
+            updateBrightness(brightnessSlider.value);
+        });
+
+        resetBrightnessBtn.addEventListener('click', () => {
+            brightnessSlider.value = 100;
+            updateBrightness(100);
+            triggerCenterIndicator('fa-sun', '明暗度已重置 (100%)');
+        });
+
+        // 影片尺寸與比例模式切換
+        function applyVideoSize(mode) {
+            currentSizeMode = mode;
+            isStretched = false;
+            stretchBtnText.textContent = '延展至全螢幕 (無黑邊拉伸)';
+
+            video.classList.remove('object-contain', 'object-cover', 'object-fill', 'scale-75', 'scale-125');
+            
+            sizeButtons.forEach(btn => {
+                if (btn.dataset.size === mode) {
+                    btn.className = 'size-btn py-1.5 rounded-lg bg-blue-600 text-white font-medium transition-colors border border-blue-500';
+                } else {
+                    btn.className = 'size-btn py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors border border-slate-700';
+                }
+            });
+
+            if (mode === 'contain') {
+                video.classList.add('object-contain');
+                sizeModeBadge.textContent = '預設適應';
+            } else if (mode === 'scale-75') {
+                video.classList.add('object-contain', 'scale-75');
+                sizeModeBadge.textContent = '縮小 75%';
+            } else if (mode === 'scale-125') {
+                video.classList.add('object-contain', 'scale-125');
+                sizeModeBadge.textContent = '放大 125%';
+            } else if (mode === 'cover') {
+                video.classList.add('object-cover');
+                sizeModeBadge.textContent = '裁切填滿';
+            }
+        }
+
+        sizeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                applyVideoSize(btn.dataset.size);
+                triggerCenterIndicator('fa-up-right-and-down-left-from-center', `尺寸模式：${sizeModeBadge.textContent}`);
+            });
+        });
+
+        // 延展至全螢幕 (相容 iPad Safari 與桌面瀏覽器)
+        stretchFullscreenBtn.addEventListener('click', () => {
+            isStretched = !isStretched;
+            
+            if (isStretched) {
+                video.classList.remove('object-contain', 'object-cover', 'scale-75', 'scale-125');
+                video.classList.add('object-fill');
+                sizeModeBadge.textContent = '強制延展填滿';
+                stretchBtnText.textContent = '恢復原始比例';
+                
+                sizeButtons.forEach(btn => {
+                    btn.className = 'size-btn py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors border border-slate-700';
+                });
+
+                enterFullscreen();
+                triggerCenterIndicator('fa-maximize', '已延展至全螢幕');
+            } else {
+                applyVideoSize('contain');
+                triggerCenterIndicator('fa-compress', '已恢復預設比例');
+            }
+        });
+
+        // 播放速度調整
+        speedSelect.addEventListener('change', () => {
+            const rate = parseFloat(speedSelect.value);
+            video.playbackRate = rate;
+            triggerCenterIndicator('fa-gauge-high', `速度 ${rate}x`);
+        });
+
+        // 音量與靜音控制
+        function updateVolumeIcon() {
+            if (video.muted || video.volume === 0) {
+                muteBtn.innerHTML = '<i class="fa-solid fa-volume-xmark text-red-400 text-xs"></i>';
+            } else if (video.volume < 0.5) {
+                muteBtn.innerHTML = '<i class="fa-solid fa-volume-low text-xs"></i>';
+            } else {
+                muteBtn.innerHTML = '<i class="fa-solid fa-volume-high text-xs"></i>';
+            }
+        }
+
+        volumeSlider.addEventListener('input', () => {
+            video.volume = parseFloat(volumeSlider.value);
+            video.muted = (video.volume === 0);
+            updateVolumeIcon();
+        });
+
+        muteBtn.addEventListener('click', () => {
+            video.muted = !video.muted;
+            if (!video.muted && video.volume === 0) {
+                video.volume = 0.5;
+                volumeSlider.value = 0.5;
+            }
+            updateVolumeIcon();
+            triggerCenterIndicator(video.muted ? 'fa-volume-xmark' : 'fa-volume-high', video.muted ? '已靜音' : `音量 ${Math.round(video.volume * 100)}%`);
+        });
+
+        // 全螢幕切換 (相容標準 API 與 WebKit / iOS)
+        function enterFullscreen() {
+            if (playerContainer.requestFullscreen) {
+                playerContainer.requestFullscreen().catch(() => {});
+            } else if (playerContainer.webkitRequestFullscreen) {
+                playerContainer.webkitRequestFullscreen();
+            } else if (video.webkitEnterFullscreen) {
+                video.webkitEnterFullscreen();
+            }
+        }
+
+        function toggleFullscreen() {
+            const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!isFs) {
+                enterFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        function handleFullscreenChange() {
+            const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+            if (isFs) {
+                fullscreenBtn.innerHTML = '<i class="fa-solid fa-compress text-sm"></i>';
+                playerContainer.classList.remove('rounded-2xl', 'border');
+            } else {
+                fullscreenBtn.innerHTML = '<i class="fa-solid fa-expand text-sm"></i>';
+                playerContainer.classList.add('rounded-2xl', 'border');
+            }
+        }
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+        // 全螢幕或播放時自動隱藏控制列
+        function resetControlsTimer() {
+            controlsOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            playerContainer.style.cursor = 'default';
+            clearTimeout(hideControlsTimeout);
+            
+            if (!video.paused && settingsPanel.classList.contains('hidden')) {
+                hideControlsTimeout = setTimeout(() => {
+                    if (settingsPanel.classList.contains('hidden')) {
+                        controlsOverlay.classList.add('opacity-0', 'pointer-events-none');
+                        if (document.fullscreenElement || document.webkitFullscreenElement) {
+                            playerContainer.style.cursor = 'none';
+                        }
+                    }
+                }, 3000);
+            }
+        }
+
+        playerContainer.addEventListener('mousemove', resetControlsTimer);
+        playerContainer.addEventListener('touchstart', resetControlsTimer);
+        video.addEventListener('pause', resetControlsTimer);
+
+        // 鍵盤快捷鍵監聽
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+
+            switch (e.key) {
+                case ' ':
+                    e.preventDefault();
+                    togglePlayPause();
+                    break;
+                case 'ArrowLeft':
+                case ',':
+                    e.preventDefault();
+                    stepFrame(-1);
+                    break;
+                case 'ArrowRight':
+                case '.':
+                    e.preventDefault();
+                    stepFrame(1);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    video.volume = Math.min(1, video.volume + 0.05);
+                    volumeSlider.value = video.volume;
+                    video.muted = false;
+                    updateVolumeIcon();
+                    triggerCenterIndicator('fa-volume-high', `音量 ${Math.round(video.volume * 100)}%`);
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    video.volume = Math.max(0, video.volume - 0.05);
+                    volumeSlider.value = video.volume;
+                    video.muted = false;
+                    updateVolumeIcon();
+                    triggerCenterIndicator('fa-volume-low', `音量 ${Math.round(video.volume * 100)}%`);
+                    break;
+                case 'f':
+                case 'F':
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+                case 'm':
+                case 'M':
+                    e.preventDefault();
+                    muteBtn.click();
+                    break;
+                case '[':
+                    e.preventDefault();
+                    setPointA();
+                    break;
+                case ']':
+                    e.preventDefault();
+                    setPointB();
+                    break;
+                case '\\':
+                    e.preventDefault();
+                    toggleABLoop();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>
